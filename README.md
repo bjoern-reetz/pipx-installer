@@ -1,9 +1,9 @@
-# pipx-installer
+# install-pipx
 
 A script to easily install pipx into its own virtual environment.
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/bjoern-reetz/pipx-installer/main/src/pipx_installer/__init__.py | python3 -
+curl -sSL https://raw.githubusercontent.com/bjoern-reetz/pipx-installer/main/src/install_pipx.py | python3 -
 ```
 
 Full usage:
