@@ -16,37 +16,6 @@ logger = logging.getLogger("pipx-installer")
 DEFAULT_INSTALL_DIR = os.path.join(  # noqa: PTH118
     os.getenv("XDG_DATA_HOME", "~/.local/share"), "pipx-venv"
 )
-PREFERRED_BIN_DIRS = ["~/.local/bin", "~/bin"]
-
-
-def _get_default_bin_dir():
-    env_path = os.getenv("PATH")
-    env_home = os.getenv("HOME")
-    paths = env_path.split(":")
-    for bin_dir in PREFERRED_BIN_DIRS:
-        if os.path.expanduser(bin_dir) in paths:  # noqa: PTH111
-            return bin_dir
-    for bin_dir in reversed(paths):
-        if bin_dir.startswith(env_home):
-            return bin_dir
-    for bin_dir in reversed(paths):
-        test_file = pathlib.Path(bin_dir) / "pipx"
-        try:
-            test_file.touch(exist_ok=False)
-        except OSError:
-            continue
-        else:
-            test_file.unlink()
-            return bin_dir
-
-
-DEFAULT_BIN_DIR = _get_default_bin_dir()
-BIN_DIR_HELP = "Use BIN_DIR for the symlink to the pipx executable."
-if DEFAULT_BIN_DIR is None:
-    BIN_DIR_HELP += " (Required.)"
-else:
-    BIN_DIR_HELP += f" (Default: {DEFAULT_BIN_DIR})"
-
 
 parser = argparse.ArgumentParser(
     prog="install-pipx",
@@ -59,6 +28,12 @@ parser.add_argument(
     help=f"The venv for pipx will be created here. (Default: {DEFAULT_INSTALL_DIR})",
 )
 parser.add_argument(
+    "--no-ensurepath",
+    action="store_true",
+    help="Do not call pipx ensurepath after installation.",
+)
+
+parser.add_argument(
     "-f",
     "--force",
     action="store_true",
@@ -68,19 +43,6 @@ parser.add_argument(
     "--dry-run",
     action="store_true",
     help="Perform a dry run, i.e. do not actually touch anything.",
-)
-
-parser_group_bin_dir = parser.add_mutually_exclusive_group()
-parser_group_bin_dir.add_argument(
-    "-b",
-    "--bin-dir",
-    default=DEFAULT_BIN_DIR,
-    help=BIN_DIR_HELP,
-)
-parser_group_bin_dir.add_argument(
-    "--no-export-bin",
-    action="store_true",
-    help="Skip creating a symlink to the pipx executable.",
 )
 
 parser_group_logging = parser.add_mutually_exclusive_group()
@@ -101,8 +63,7 @@ def cli(
     install_dir: str,
     force: bool,
     dry_run: bool,
-    bin_dir: str,
-    no_export_bin: bool,
+    no_ensurepath: bool,
     log_config: str,
     verbose: int,
     quiet: int,
@@ -113,23 +74,14 @@ def cli(
         quiet=quiet,
     )
 
-    if not bin_dir and not no_export_bin:
-        logger.critical(
-            "Could not determine a suitable BIN_DIR. Please either specify --bin-dir or --no-export-bin."
-        )
-
     create_venv(install_dir, force=force, dry_run=dry_run)
     install_pipx(install_dir, dry_run=dry_run)
 
-    if no_export_bin:
+    if no_ensurepath:
         logger.debug("Skip creating a symlink of pipx executable.")
         return
 
-    export_bin(
-        install_dir=install_dir,
-        bin_dir=bin_dir,
-        dry_run=dry_run,
-    )
+    call_pipx_ensurepath(install_dir, dry_run=dry_run)
 
 
 def setup_logging(
@@ -181,26 +133,19 @@ def install_pipx(install_dir: str | os.PathLike, *, dry_run=False):
     # todo: pipe output to logger
     # todo: inherit verbosity
     if not dry_run:
-        subprocess.run(
-            [pip, "install", "pipx"],  # noqa: S603
-            check=True,
-        )
+        subprocess.run([pip, "install", "pipx"], check=True)  # noqa: S603
 
 
-def export_bin(
-    *,
+def call_pipx_ensurepath(
     install_dir: str | os.PathLike,
-    bin_dir: str | os.PathLike,
+    *,
     dry_run=False,
 ):
-    install_dir_path = pathlib.Path(install_dir).expanduser().resolve()
-    bin_dir_path = pathlib.Path(bin_dir).expanduser().resolve()
-
-    pipx_bin_path = install_dir_path / "bin/pipx"
-    pipx_symlink_path = bin_dir_path / "pipx"
-    logger.info('Creating symlink at "%s".', pipx_symlink_path)
+    install_dir_path = pathlib.Path(install_dir).expanduser()
+    pipx = os.fspath(install_dir_path / "bin/pipx")
+    logger.info("Calling pipx ensurepath")
     if not dry_run:
-        pipx_symlink_path.symlink_to(pipx_bin_path)
+        subprocess.run([pipx, "ensurepath"], check=True)  # noqa: S603
 
 
 def _is_path_free(target: pathlib.PathLike, *, empty_dir_ok=False):
