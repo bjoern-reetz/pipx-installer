@@ -6,16 +6,18 @@ import logging
 import logging.config
 import os
 import os.path
-import pathlib
 import shutil
 import subprocess
 import venv
+from pathlib import Path
 
 logger = logging.getLogger("pipx-installer")
 
 DEFAULT_INSTALL_DIR = os.path.join(  # noqa: PTH118
     os.getenv("XDG_DATA_HOME", "~/.local/share"), "pipx-venv"
 )
+DEFAULT_PIPX_BIN_DIR = Path.home() / ".local/bin"
+LOCAL_BIN_DIR = Path(os.environ.get("PIPX_BIN_DIR", DEFAULT_PIPX_BIN_DIR)).resolve()
 
 parser = argparse.ArgumentParser(
     prog="install-pipx",
@@ -82,13 +84,14 @@ def cli(
         return
 
     call_pipx_ensurepath(install_dir, dry_run=dry_run)
+    export_pipx_bin(install_dir, LOCAL_BIN_DIR, dry_run=dry_run)
 
 
 def setup_logging(
     *, log_config: str | os.PathLike | None = None, verbose: int = 0, quiet: int = 0
 ):
     if log_config:
-        log_config_path = pathlib.Path(log_config).expanduser().resolve()
+        log_config_path = Path(log_config).expanduser().resolve()
         if log_config_path.suffix == ".json":
             logging.config.dictConfig(json.loads(log_config_path.read_text()))
             logger.debug(
@@ -107,7 +110,7 @@ def setup_logging(
 
 
 def create_venv(install_dir: str | os.PathLike, *, force=False, dry_run=False):
-    install_dir_path = pathlib.Path(install_dir).expanduser().resolve()
+    install_dir_path = Path(install_dir).expanduser().resolve()
 
     if not _is_path_free(install_dir_path, empty_dir_ok=True):
         if not force:
@@ -126,7 +129,7 @@ def create_venv(install_dir: str | os.PathLike, *, force=False, dry_run=False):
 
 
 def install_pipx(install_dir: str | os.PathLike, *, dry_run=False):
-    install_dir_path = pathlib.Path(install_dir).expanduser().resolve()
+    install_dir_path = Path(install_dir).expanduser().resolve()
 
     logger.info('Installing pipx to "%s".', install_dir_path)
     pip = os.fspath(install_dir_path / "bin/pip")
@@ -141,15 +144,31 @@ def call_pipx_ensurepath(
     *,
     dry_run=False,
 ):
-    install_dir_path = pathlib.Path(install_dir).expanduser()
+    install_dir_path = Path(install_dir).expanduser()
     pipx = os.fspath(install_dir_path / "bin/pipx")
     logger.info("Calling pipx ensurepath")
     if not dry_run:
         subprocess.run([pipx, "ensurepath"], check=True)  # noqa: S603
 
 
-def _is_path_free(target: pathlib.PathLike, *, empty_dir_ok=False):
-    target_path = pathlib.Path(target)
+def export_pipx_bin(
+    install_dir: str | os.PathLike,
+    bin_dir: str | os.PathLike,
+    *,
+    dry_run=False,
+):
+    install_dir_path = Path(install_dir).expanduser()
+    bin_dir = Path(bin_dir).expanduser()
+
+    pipx = os.fspath(install_dir_path / "bin/pipx")
+    symlink = bin_dir / "pipx"
+    logger.info('Creating symlink to pipx in "%s".', bin_dir)
+    if not dry_run:
+        symlink.symlink_to(pipx)
+
+
+def _is_path_free(target: os.PathLike, *, empty_dir_ok=False):
+    target_path = Path(target)
 
     # Path.exists() follows symlinks and hence takes a broken symlink for a non-existent file
     if not target_path.exists() and not target_path.is_symlink():
@@ -165,8 +184,8 @@ def _is_path_free(target: pathlib.PathLike, *, empty_dir_ok=False):
     return False
 
 
-def _remove_path(target: pathlib.PathLike):
-    target_path = pathlib.Path(target)
+def _remove_path(target: os.PathLike):
+    target_path = Path(target)
     if target_path.is_dir():
         shutil.rmtree(target_path)
     else:
