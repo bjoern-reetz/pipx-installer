@@ -2,11 +2,19 @@
 
 A script to easily install pipx into its own virtual environment in just one line.
 
-The defaults respect the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html). The script also ensures pipx and the packages that will be installed with it are available on the $PATH.
-
 ```bash
 curl -sSL https://raw.githubusercontent.com/bjoern-reetz/pipx-installer/main/src/install_pipx.py | python3 -
 ```
+
+The above command will perform the following steps:
+
+1. create an isolated Python environment
+2. install pipx into that environment
+3. call pipx ensurepath
+
+It also creates a symlink to the pipx executable in the PIPX_BIN_DIR just like `pipx ensurepath` would do if you had installed it via `pip install --user pipx`.
+The default locations are chosen in conformance to the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html).
+You can preview everything that will be done by appending `--dry-run`.
 
 Full usage:
 
