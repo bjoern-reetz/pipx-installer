@@ -3,7 +3,7 @@ requires-python = ">=3.8"
 
 [tool.poetry]
 name = "pipx-installer"
-version = "0.1.0"
+version = "0.1.1"
 description = ""
 authors = ["Björn Reetz <bjoern.reetz@dwd.de>"]
 readme = "README.md"
