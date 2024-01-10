@@ -1,6 +1,8 @@
 # install-pipx
 
-A script to easily install pipx into its own virtual environment.
+A script to easily install pipx into its own virtual environment in just one line.
+
+The defaults respect the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html). The script also ensures pipx and the packages that will be installed with it are available on the $PATH.
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/bjoern-reetz/pipx-installer/main/src/install_pipx.py | python3 -
