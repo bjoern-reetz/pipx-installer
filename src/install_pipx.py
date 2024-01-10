@@ -21,18 +21,18 @@ LOCAL_BIN_DIR = Path(os.environ.get("PIPX_BIN_DIR", DEFAULT_PIPX_BIN_DIR)).resol
 
 parser = argparse.ArgumentParser(
     prog="install-pipx",
-    description="Install pipx into an isolated Python environment and it globally available.",
+    description="A script to easily install pipx into its own virtual environment in just one line.",
 )
 parser.add_argument(
     "-i",
     "--install-dir",
     default=DEFAULT_INSTALL_DIR,
-    help=f"The venv for pipx will be created here. (Default: {DEFAULT_INSTALL_DIR})",
+    help="The venv for pipx will be created here. (Default: $XDG_DATA_HOME/pipx-venv or ~/.local/share/pipx-venv if unset)",
 )
 parser.add_argument(
     "--no-ensurepath",
     action="store_true",
-    help="Do not call pipx ensurepath after installation.",
+    help="After installation, calling pipx ensurepath and creating a symlink will both be skipped.",
 )
 
 parser.add_argument(
@@ -44,7 +44,7 @@ parser.add_argument(
 parser.add_argument(
     "--dry-run",
     action="store_true",
-    help="Perform a dry run, i.e. do not actually touch anything.",
+    help="Perform a dry run, i.e. do not write anything to disk.",
 )
 
 parser_group_logging = parser.add_mutually_exclusive_group()
