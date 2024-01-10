@@ -144,7 +144,7 @@ def call_pipx_ensurepath(
     *,
     dry_run=False,
 ):
-    install_dir_path = Path(install_dir).expanduser()
+    install_dir_path = Path(install_dir).expanduser().resolve()
     pipx = os.fspath(install_dir_path / "bin/pipx")
     logger.info("Calling pipx ensurepath")
     if not dry_run:
@@ -157,10 +157,10 @@ def export_pipx_bin(
     *,
     dry_run=False,
 ):
-    install_dir_path = Path(install_dir).expanduser()
-    bin_dir = Path(bin_dir).expanduser()
+    install_dir_path = Path(install_dir).expanduser().resolve()
+    bin_dir = Path(bin_dir).expanduser().resolve()
 
-    pipx = os.fspath(install_dir_path / "bin/pipx")
+    pipx = install_dir_path / "bin/pipx"
     symlink = bin_dir / "pipx"
     logger.info('Creating symlink to pipx in "%s".', bin_dir)
     if not dry_run:
@@ -168,10 +168,9 @@ def export_pipx_bin(
 
 
 def _is_path_free(target: os.PathLike, *, empty_dir_ok=False):
-    target_path = Path(target)
+    target_path = Path(target).expanduser().resolve()
 
-    # Path.exists() follows symlinks and hence takes a broken symlink for a non-existent file
-    if not target_path.exists() and not target_path.is_symlink():
+    if not target_path.exists():
         return True
 
     if (
@@ -185,7 +184,7 @@ def _is_path_free(target: os.PathLike, *, empty_dir_ok=False):
 
 
 def _remove_path(target: os.PathLike):
-    target_path = Path(target)
+    target_path = Path(target).expanduser().resolve()
     if target_path.is_dir():
         shutil.rmtree(target_path)
     else:
