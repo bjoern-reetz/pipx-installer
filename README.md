@@ -19,19 +19,46 @@ You can preview everything that will be done by appending `--dry-run`.
 Full usage:
 
 ```
-usage: install-pipx [-h] [-i INSTALL_DIR] [--no-ensurepath] [-f] [--dry-run] [--log-config LOG_CONFIG | -v | -q]
+usage: install-pipx [-h] [--system-site-packages] [--symlinks | --copies] [--clear]
+                    [--prompt PROMPT] [--upgrade-deps] [--no-ensure-path] [--dry-run]
+                    [--log-config LOG_CONFIG | -v | -q]
+                    [ENV_DIR]
 
-A script to easily install pipx into its own virtual environment in just one line.
+Creates virtual Python environments and installs pipx into it. The default location is
+chosen according to the XDG Base Directory Specification.
+
+positional arguments:
+  ENV_DIR               A directory to create the environment in. In the current context,
+                        /home/breetz/.local/share/pipx-venv is the default.
 
 options:
   -h, --help            show this help message and exit
-  -i INSTALL_DIR, --install-dir INSTALL_DIR
-                        The venv for pipx will be created here. (Default: $XDG_DATA_HOME/pipx-venv or ~/.local/share/pipx-venv if unset)
-  --no-ensurepath       After installation, calling pipx ensurepath and creating a symlink will both be skipped.
-  -f, --force           Overwrite existing files without warning.
   --dry-run             Perform a dry run, i.e. do not write anything to disk.
   --log-config LOG_CONFIG
-                        Path to a JSON or INI file containing advanced logging configuration.
+                        Path to a JSON or INI file containing advanced logging
+                        configuration.
   -v, --verbose         Increase logging level.
   -q, --quiet           Decrease logging level.
+
+Options for environment creation:
+  --system-site-packages
+                        Give the virtual environment access to the system site-packages
+                        dir.
+  --symlinks            Try to use symlinks rather than copies. On the current platform,
+                        this is the default.
+  --copies              Try to use copies rather than symlinks. On the current platform,
+                        the default is to use symlinks.
+  --clear               Delete the contents of the environment directory if it already
+                        exists, before environment creation.
+  --prompt PROMPT       Provides an alternative prompt prefix for this environment.
+  --upgrade-deps        Before installing pipx, upgrade core dependencies (i.e. pip,
+                        setuptools) to their latest versions.
+
+Options related to pipx:
+  --no-ensure-path      Skip both calling pipx ensurepath and creating a symlink after
+                        installation. When using this option, the pipx command will not
+                        be globally available.
+
+After installing pipx with this script, the pipx command should be available from
+anywhere without activating any environment.
 ```
