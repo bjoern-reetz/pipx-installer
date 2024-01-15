@@ -6,89 +6,179 @@ import logging
 import logging.config
 import os
 import os.path
-import shutil
 import subprocess
 import venv
 from pathlib import Path
 
 logger = logging.getLogger("pipx-installer")
 
-DEFAULT_INSTALL_DIR = os.path.join(  # noqa: PTH118
-    os.getenv("XDG_DATA_HOME", "~/.local/share"), "pipx-venv"
+DEFAULT_USE_SYMLINKS = os.name != "nt"
+XDG_DATA_HOME = Path(os.getenv("XDG_DATA_HOME", "~/.local/share")).expanduser()
+DEFAULT_ENV_DIR = XDG_DATA_HOME / "pipx-venv"
+
+SYMLINKS_HELP = "Try to use symlinks rather than copies."
+COPIES_HELP = "Try to use copies rather than symlinks."
+if DEFAULT_USE_SYMLINKS:
+    SYMLINKS_HELP += " On the current platform, this is the default."
+    COPIES_HELP += " On the current platform, the default is to use symlinks."
+else:
+    SYMLINKS_HELP += " On the current platform, the default is to use copies."
+    COPIES_HELP += " On the current platform, this is the default."
+ENV_DIR_HELP = (
+    "A directory to create the environment in. "
+    f"In the current context, {DEFAULT_ENV_DIR} is the default."
 )
+
 DEFAULT_PIPX_BIN_DIR = Path.home() / ".local/bin"
 LOCAL_BIN_DIR = Path(os.environ.get("PIPX_BIN_DIR", DEFAULT_PIPX_BIN_DIR)).resolve()
+CORE_VENV_DEPS = ("pip", "setuptools")
 
 parser = argparse.ArgumentParser(
     prog="install-pipx",
-    description="A script to easily install pipx into its own virtual environment in just one line.",
+    description="Creates virtual Python environments and installs pipx into it. "
+    "The default location is chosen according to the XDG Base Directory Specification.",
+    epilog="After installing pipx with this script,"
+    " the pipx command should be available from anywhere without activating any environment.",
 )
 parser.add_argument(
-    "-i",
-    "--install-dir",
-    default=DEFAULT_INSTALL_DIR,
-    help="The venv for pipx will be created here. (Default: $XDG_DATA_HOME/pipx-venv or ~/.local/share/pipx-venv if unset)",
-)
-parser.add_argument(
-    "--no-ensurepath",
-    action="store_true",
-    help="After installation, calling pipx ensurepath and creating a symlink will both be skipped.",
+    "env_dir",
+    nargs="?",
+    default=DEFAULT_ENV_DIR,
+    metavar="ENV_DIR",
+    help=ENV_DIR_HELP,
 )
 
-parser.add_argument(
-    "-f",
-    "--force",
+arg_group_venv = parser.add_argument_group("Options for environment creation")
+arg_group_venv.add_argument(
+    "--system-site-packages",
+    default=False,
     action="store_true",
-    help="Overwrite existing files without warning.",
+    help="Give the virtual environment access to the system site-packages dir.",
 )
+mutex_group_symlinks = arg_group_venv.add_mutually_exclusive_group()
+mutex_group_symlinks.add_argument(
+    "--symlinks",
+    default=DEFAULT_USE_SYMLINKS,
+    action="store_true",
+    dest="symlinks",
+    help=SYMLINKS_HELP,
+)
+mutex_group_symlinks.add_argument(
+    "--copies",
+    default=not DEFAULT_USE_SYMLINKS,
+    action="store_false",
+    dest="symlinks",
+    help=COPIES_HELP,
+)
+arg_group_venv.add_argument(
+    "--clear",
+    default=False,
+    action="store_true",
+    dest="clear",
+    help="Delete the contents of the environment directory if it already exists, before environment creation.",
+)
+arg_group_venv.add_argument(
+    "--prompt", help="Provides an alternative prompt prefix for this environment."
+)
+arg_group_venv.add_argument(
+    "--upgrade-deps",
+    default=False,
+    action="store_true",
+    dest="upgrade_deps",
+    help="Before installing pipx, upgrade core dependencies "
+    f"(i.e. {', '.join(CORE_VENV_DEPS)}) to their latest versions.",
+)
+
+arg_group_pipx = parser.add_argument_group("Options related to pipx")
+arg_group_pipx.add_argument(
+    "--no-ensure-path",
+    action="store_false",
+    dest="ensure_path",
+    help="Skip both calling pipx ensurepath and creating a symlink after installation. "
+    "When using this option, the pipx command will not be globally available.",
+)
+
 parser.add_argument(
     "--dry-run",
     action="store_true",
     help="Perform a dry run, i.e. do not write anything to disk.",
 )
-
-parser_group_logging = parser.add_mutually_exclusive_group()
-parser_group_logging.add_argument(
+mutex_group_logging = parser.add_mutually_exclusive_group()
+mutex_group_logging.add_argument(
     "--log-config",
     help="Path to a JSON or INI file containing advanced logging configuration.",
 )
-parser_group_logging.add_argument(
+mutex_group_logging.add_argument(
     "-v", "--verbose", action="count", default=0, help="Increase logging level."
 )
-parser_group_logging.add_argument(
+mutex_group_logging.add_argument(
     "-q", "--quiet", action="count", default=0, help="Decrease logging level."
 )
 
 
 def cli(
     *,
-    install_dir: str,
-    force: bool,
+    env_dir: str,
+    system_site_packages: bool,
+    clear: bool,
+    symlinks: bool,
+    prompt: str | None,
+    upgrade_deps: bool,
+    ensure_path: bool,
     dry_run: bool,
-    no_ensurepath: bool,
-    log_config: str,
+    log_config: str | None,
     verbose: int,
     quiet: int,
 ):
+    level = logging.INFO + 10 * (quiet - verbose)
     setup_logging(
         log_config=log_config,
-        verbose=verbose,
-        quiet=quiet,
+        level=level,
     )
 
-    create_venv(install_dir, force=force, dry_run=dry_run)
-    install_pipx(install_dir, dry_run=dry_run)
+    normalized_env_dir = Path(env_dir).expanduser().resolve()
 
-    if no_ensurepath:
-        logger.debug("Skip creating a symlink of pipx executable.")
-        return
+    logger.info("creating Python environment in %s", normalized_env_dir)
+    if not dry_run:
+        # EnvBuilder.create creates the environment directory
+        # and all necessary subdirectories that don't already exist
+        venv.EnvBuilder(
+            system_site_packages=system_site_packages,
+            clear=clear,
+            symlinks=symlinks,
+            with_pip=True,
+            prompt=prompt,
+        ).create(normalized_env_dir)
 
-    call_pipx_ensurepath(install_dir, dry_run=dry_run)
-    export_pipx_bin(install_dir, LOCAL_BIN_DIR, dry_run=dry_run)
+    pip = os.fspath(normalized_env_dir / "bin/pip")
+
+    # Starting with Python 3.9, EnvBuilder has an upgrade_deps parameter.
+    # But because we want to support Python 3.8 as well, we need to implement it ourselves.
+    if upgrade_deps:
+        logger.info("upgrading core dependencies: %s", ", ".join(CORE_VENV_DEPS))
+        if not dry_run:
+            subprocess.run([pip, "install", "--upgrade", *CORE_VENV_DEPS], check=True)  # noqa: S603
+
+    logger.info("installing pipx")
+    if not dry_run:
+        subprocess.run([pip, "install", "pipx"], check=True)  # noqa: S603
+
+    pipx = os.fspath(normalized_env_dir / "bin/pipx")
+
+    if ensure_path:
+        pipx_symlink = LOCAL_BIN_DIR / "pipx"
+
+        logger.info("calling pipx ensurepath")
+        if not dry_run:
+            subprocess.run([pipx, "ensurepath"], check=True)  # noqa: S603
+
+        logger.info("creating symlink to pipx in %s", LOCAL_BIN_DIR)
+        if not dry_run:
+            pipx_symlink.symlink_to(pipx)
 
 
 def setup_logging(
-    *, log_config: str | os.PathLike | None = None, verbose: int = 0, quiet: int = 0
+    *, log_config: str | os.PathLike | None = None, level: int = logging.INFO
 ):
     if log_config:
         log_config_path = Path(log_config).expanduser().resolve()
@@ -104,91 +194,8 @@ def setup_logging(
             )
         return
 
-    level = logging.INFO + 10 * (quiet - verbose)
     logging.basicConfig(level=level)
     logger.debug("Logging level was set to %s.", logging.getLevelName(level))
-
-
-def create_venv(install_dir: str | os.PathLike, *, force=False, dry_run=False):
-    install_dir_path = Path(install_dir).expanduser().resolve()
-
-    if not _is_path_free(install_dir_path, empty_dir_ok=True):
-        if not force:
-            msg = "The target location already exists."
-            raise FileExistsError(msg)
-
-        logger.info("Removing pre-existing target.")
-        if not dry_run:
-            _remove_path(install_dir_path)
-
-    logger.info("Creating venv at %s", install_dir_path)
-    if not dry_run:
-        # EnvBuilder.create creates the environment directory
-        # and all necessary subdirectories that don't already exist
-        venv.EnvBuilder(with_pip=True, symlinks=True).create(install_dir_path)
-
-
-def install_pipx(install_dir: str | os.PathLike, *, dry_run=False):
-    install_dir_path = Path(install_dir).expanduser().resolve()
-
-    logger.info('Installing pipx to "%s".', install_dir_path)
-    pip = os.fspath(install_dir_path / "bin/pip")
-    # todo: pipe output to logger
-    # todo: inherit verbosity
-    if not dry_run:
-        subprocess.run([pip, "install", "pipx"], check=True)  # noqa: S603
-
-
-def call_pipx_ensurepath(
-    install_dir: str | os.PathLike,
-    *,
-    dry_run=False,
-):
-    install_dir_path = Path(install_dir).expanduser().resolve()
-    pipx = os.fspath(install_dir_path / "bin/pipx")
-    logger.info("Calling pipx ensurepath")
-    if not dry_run:
-        subprocess.run([pipx, "ensurepath"], check=True)  # noqa: S603
-
-
-def export_pipx_bin(
-    install_dir: str | os.PathLike,
-    bin_dir: str | os.PathLike,
-    *,
-    dry_run=False,
-):
-    install_dir_path = Path(install_dir).expanduser().resolve()
-    bin_dir = Path(bin_dir).expanduser().resolve()
-
-    pipx = install_dir_path / "bin/pipx"
-    symlink = bin_dir / "pipx"
-    logger.info('Creating symlink to pipx in "%s".', bin_dir)
-    if not dry_run:
-        symlink.symlink_to(pipx)
-
-
-def _is_path_free(target: os.PathLike, *, empty_dir_ok=False):
-    target_path = Path(target).expanduser().resolve()
-
-    if not target_path.exists():
-        return True
-
-    if (
-        empty_dir_ok
-        and target_path.is_dir()
-        and all(False for _ in target_path.iterdir())
-    ):
-        return True
-
-    return False
-
-
-def _remove_path(target: os.PathLike):
-    target_path = Path(target).expanduser().resolve()
-    if target_path.is_dir():
-        shutil.rmtree(target_path)
-    else:
-        target_path.unlink()
 
 
 def main():
