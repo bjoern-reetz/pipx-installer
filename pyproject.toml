@@ -3,7 +3,7 @@ requires-python = ">=3.8"
 
 [tool.poetry]
 name = "pipx-installer"
-version = "1.0.0"
+version = "2.0.0"
 description = "A script to install pipx into its own virtual environment in just one line."
 authors = ["Björn Reetz <bjoern.reetz@dwd.de>"]
 readme = "README.md"

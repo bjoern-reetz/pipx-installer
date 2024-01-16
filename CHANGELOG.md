@@ -1,3 +1,13 @@
+## v2.0.0 (2024-01-16)
+
+### BREAKING CHANGE
+
+- Some options/arguments have changed name.
+
+### Refactor
+
+- rewrite CLI to support options like python -m venv
+
 ## v1.0.0 (2024-01-10)
 
 ### BREAKING CHANGE
